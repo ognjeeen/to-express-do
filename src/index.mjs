@@ -1,25 +1,52 @@
 import express from 'express';
+import { checkSchema, matchedData, validationResult } from 'express-validator';
+import { createUserValidationSchema } from './utils/validationSchemas.mjs';
+
+const PORT = process.env.PORT || 3000;
+const users = [
+  { id: 1, username: 'ognjen', displayName: 'Ognjen' },
+  { id: 2, username: 'dave', displayName: 'Dave' },
+  { id: 3, username: 'john', displayName: 'John' },
+  { id: 4, username: 'jason', displayName: 'Jason' },
+  { id: 5, username: 'henry', displayName: 'Henry' },
+  { id: 6, username: 'jean', displayName: 'Jean' },
+];
 
 const app = express();
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
-const PORT = process.env.PORT || 3000;
 
-const users = [
-  { id: 1, username: 'ognjen', displaName: 'Ognjen' },
-  { id: 2, username: 'dave', displaName: 'Dave' },
-  { id: 3, username: 'john', displaName: 'John' },
-  { id: 4, username: 'jason', displaName: 'Jason' },
-  { id: 5, username: 'henry', displaName: 'Henry' },
-  { id: 6, username: 'jean', displaName: 'Jean' },
-];
+const loggingMiddleWare = (req, res, next) => {
+  console.log(`${req.method} - ${req.url}`);
+  next();
+};
+
+const resolveIndexUserById = (req, res, next) => {
+  const {
+    params: { id },
+  } = req;
+  const userId = parseInt(id);
+  if (isNaN(userId)) {
+    return res.status(400).send({ mgs: 'Invalid user id' });
+  }
+
+  const findUserIndex = users.findIndex((user) => user.id === userId);
+  if (findUserIndex === -1) {
+    return res.status(404).send({ mgs: 'User does not exist' });
+  }
+
+  req.findUserIndex = findUserIndex;
+  next();
+};
+
+app.use(loggingMiddleWare);
 
 app.get('/', (req, res) => {
   res.status(201).send({ msg: 'hello' });
 });
 
-app.get('/api/users', (req, res) => {
+app.get('/api/users', checkSchema(createUserValidationSchema), (req, res) => {
   const {
     query: { filter, value },
   } = req;
@@ -30,12 +57,16 @@ app.get('/api/users', (req, res) => {
   return res.send(users);
 });
 
-app.post('/api/users', (req, res) => {
-  const { body } = req;
+app.post('/api/users', checkSchema(createUserValidationSchema), (req, res) => {
+  const result = validationResult(req);
+
+  if (!result.isEmpty()) return res.status(400).send({ error: result.array() });
+
+  const data = matchedData(req);
 
   const newUser = {
     id: users.length + 1,
-    ...body,
+    ...data,
   };
 
   users.push(newUser);
@@ -43,14 +74,10 @@ app.post('/api/users', (req, res) => {
   return res.status(201).send(users);
 });
 
-app.get('/api/users/:id', (req, res) => {
-  const userId = parseInt(req.params.id);
+app.get('/api/users/:id', resolveIndexUserById, (req, res) => {
+  const { findUserIndex } = req;
 
-  if (isNaN(userId)) {
-    return res.status(400).send({ mgs: 'Invalid user id' });
-  }
-
-  const findUser = users.find((user) => user.id === userId);
+  const findUser = users[findUserIndex];
 
   if (!findUser) {
     return res.status(404).send({ mgs: 'User does not exist' });
@@ -59,23 +86,11 @@ app.get('/api/users/:id', (req, res) => {
   return res.status(200).send(findUser);
 });
 
-app.put('/api/users/:id', (req, res) => {
-  const {
-    body,
-    params: { id },
-  } = req;
-  const userId = parseInt(id);
-  if (isNaN(userId)) {
-    return res.status(400).send({ mgs: 'Invalid user id' });
-  }
-
-  const findUserIndex = users.findIndex((user) => user.id === userId);
-  if (findUserIndex === -1) {
-    return res.status(404).send({ mgs: 'User does not exist' });
-  }
+app.put('/api/users/:id', resolveIndexUserById, (req, res) => {
+  const { body, findUserIndex } = req;
 
   users[findUserIndex] = {
-    id: userId,
+    id: users[findUserIndex].id,
     ...body,
   };
 
@@ -83,19 +98,7 @@ app.put('/api/users/:id', (req, res) => {
 });
 
 app.patch('/api/users/:id', (req, res) => {
-  const {
-    body,
-    params: { id },
-  } = req;
-  const userId = parseInt(id);
-  if (isNaN(userId)) {
-    return res.status(400).send({ mgs: 'Invalid user id' });
-  }
-
-  const findUserIndex = users.findIndex((user) => user.id === userId);
-  if (findUserIndex === -1) {
-    return res.status(404).send({ mgs: 'User does not exist' });
-  }
+  const { body, findUserIndex } = req;
 
   users[findUserIndex] = { ...users[findUserIndex], ...body };
 
@@ -103,18 +106,7 @@ app.patch('/api/users/:id', (req, res) => {
 });
 
 app.delete('/api/users/:id', (req, res) => {
-  const {
-    params: { id },
-  } = req;
-  const userId = parseInt(id);
-  if (isNaN(userId)) {
-    return res.status(400).send({ mgs: 'Invalid user id' });
-  }
-
-  const findUserIndex = users.findIndex((user) => user.id === userId);
-  if (findUserIndex === -1) {
-    return res.status(404).send({ mgs: 'User does not exist' });
-  }
+  const { findUserIndex } = req;
 
   users.splice(findUserIndex, 1);
 
