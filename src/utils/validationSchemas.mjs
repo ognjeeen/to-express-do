@@ -18,6 +18,9 @@ export const createUserValidationSchema = {
   displayName: {
     notEmpty: true,
   },
+};
+
+export const filterQueryValidation = {
   filter: {
     isString: true,
     notEmpty: {
