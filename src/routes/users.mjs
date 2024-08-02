@@ -1,21 +1,13 @@
 import { Router } from 'express';
 import { checkSchema, matchedData, validationResult } from 'express-validator';
-import {
-  createUserValidationSchema,
-  filterQueryValidation,
-} from '../utils/validationSchemas.mjs';
-import { users } from '../utils/constants.mjs';
-import { resolveIndexUserById } from '../utils/middlewares.mjs';
+import { User } from '../mongoose/schemas/userModel.mjs';
+import { createUserValidationSchema } from '../utils/validationSchemas.mjs';
 
 const router = Router();
+const isIdValid = (id) => id.length === 24;
 
-router.get('/api/users', checkSchema(filterQueryValidation), (req, res) => {
-  const {
-    query: { filter, value },
-  } = req;
-
-  if (filter && value)
-    return res.send(users.filter((user) => user[filter].includes(value)));
+router.get('/api/users', async (req, res) => {
+  const users = await User.find();
 
   return res.send(users);
 });
@@ -23,30 +15,27 @@ router.get('/api/users', checkSchema(filterQueryValidation), (req, res) => {
 router.post(
   '/api/users',
   checkSchema(createUserValidationSchema),
-  (req, res) => {
+  async (req, res) => {
     const result = validationResult(req);
-
-    if (!result.isEmpty())
-      return res.status(400).send({ error: result.array() });
+    if (!result.isEmpty()) return res.status(400).send(result.array());
 
     const data = matchedData(req);
 
-    const newUser = {
-      id: users.length + 1,
-      ...data,
-    };
-
-    users.push(newUser);
-
-    return res.status(201).send(users);
+    const newUser = new User(data);
+    try {
+      const savedUser = await newUser.save();
+      return res.status(201).send(savedUser);
+    } catch (error) {
+      console.log(error);
+      return res.sendStatus(400);
+    }
   }
 );
 
-router.get('/api/users/:id', resolveIndexUserById, (req, res) => {
-  const { findUserIndex } = req;
+router.get('/api/users/:id', async (req, res) => {
+  const id = req.params.id;
 
-  const findUser = users[findUserIndex];
-
+  const findUser = await User.findById(id);
   if (!findUser) {
     return res.status(404).send({ mgs: 'User does not exist' });
   }
@@ -54,29 +43,35 @@ router.get('/api/users/:id', resolveIndexUserById, (req, res) => {
   return res.status(200).send(findUser);
 });
 
-router.put('/api/users/:id', resolveIndexUserById, (req, res) => {
-  const { body, findUserIndex } = req;
+router.put('/api/users/:id', async (req, res) => {
+  const userId = req.params.id;
+  const userData = req.body;
 
-  users[findUserIndex] = {
-    id: users[findUserIndex].id,
-    ...body,
-  };
+  try {
+    const updatedUser = await User.findByIdAndUpdate(userId, userData, {
+      new: true,
+    });
 
-  return res.sendStatus(200);
+    if (!updatedUser) {
+      return res.status(404).send('User not found');
+    }
+
+    return res.status(200).json(updatedUser);
+  } catch (error) {
+    console.error('Error updating user', error);
+    return res.statusSend(500);
+  }
 });
 
-router.patch('/api/users/:id', (req, res) => {
-  const { body, findUserIndex } = req;
+router.delete('/api/users/:id', async (req, res) => {
+  const id = req.params.id;
 
-  users[findUserIndex] = { ...users[findUserIndex], ...body };
+  if (!isIdValid(id)) {
+    res.send(404);
+    return;
+  }
 
-  return res.sendStatus(200);
-});
-
-router.delete('/api/users/:id', (req, res) => {
-  const { findUserIndex } = req;
-
-  users.splice(findUserIndex, 1);
+  await User.deleteOne({ _id: id });
 
   return res.sendStatus(200);
 });
