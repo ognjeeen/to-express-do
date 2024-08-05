@@ -3,9 +3,10 @@ import routes from './routes/index.mjs';
 import cookieParser from 'cookie-parser';
 import session from 'express-session';
 import passport from 'passport';
-import './strategies/local-strategy.mjs';
+// import './strategies/local-strategy.mjs';
 import mongoose from 'mongoose';
 import MongoStore from 'connect-mongo';
+import './strategies/github-strategy.mjs';
 
 const PORT = process.env.PORT || 3000;
 const app = express();
@@ -53,6 +54,15 @@ app.post('/api/auth/logout', (req, res) => {
     res.send(200);
   });
 });
+
+app.get('/api/auth/github', passport.authenticate('github'));
+app.get(
+  '/auth/github/callback',
+  passport.authenticate('github'),
+  (req, res) => {
+    res.sendStatus(200);
+  }
+);
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
